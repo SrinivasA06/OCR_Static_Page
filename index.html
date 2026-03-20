@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DocCapture - OCR & Supabase</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Tesseract -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+</head>
+
+<body>
+    <div class="app-container">
+        <header>
+            <h1>DocCapture</h1>
+            <p>Automatically extract invoice details and save to Supabase.</p>
+        </header>
+
+        <section class="card settings-card">
+            <h2>Supabase Credentials (Auto-Saved)</h2>
+            <div class="input-group">
+                <label for="supaUrl">Project URL</label>
+                <input type="text" id="supaUrl" placeholder="https://xyzcompany.supabase.co">
+            </div>
+            <div class="input-group">
+                <label for="supaKey">Anon public Key</label>
+                <input type="password" id="supaKey" placeholder="eyJh...">
+            </div>
+            <p class="subtitle" style="margin-top: 10px; font-size: 12px;">Notes: Requires table
+                <code>invoice_customers</code> with cols <code>customer_name</code>, <code>company</code>,
+                <code>phone</code>, <code>address</code>, <code>image_url</code>, <code>image_path</code>.</p>
+        </section>
+
+        <main>
+            <div class="card upload-card">
+                <h2>1. Upload Invoice</h2>
+                <div class="drop-zone" id="dropZone">
+                    <span class="drop-text">Drag & drop an image or click to select</span>
+                    <input type="file" id="fileInput" accept="image/*" hidden>
+                </div>
+
+                <button id="openCameraBtn" class="btn primary-btn"
+                    style="margin-bottom: 1.5rem; background-color: #6366f1;">📷 Use Camera</button>
+
+                <div id="cameraContainer" style="display: none; margin-bottom: 1.5rem;">
+                    <video id="cameraVideo" autoplay playsinline
+                        style="width: 100%; border-radius: 0.5rem; border: 2px solid var(--border);"></video>
+                    <div style="display: flex; gap: 1rem; margin-top: 0.5rem;">
+                        <button id="captureBtn" class="btn success-btn" style="margin-top: 0;">Take Photo</button>
+                        <button id="cancelCameraBtn" class="btn"
+                            style="margin-top: 0; background-color: var(--error);">Cancel</button>
+                    </div>
+                </div>
+
+                <div class="preview-container" id="previewContainer" style="display: none;">
+                    <img id="imagePreview" src="" alt="Document Preview">
+                </div>
+                <button id="extractBtn" class="btn primary-btn" disabled>Extract Invoice Data</button>
+            </div>
+
+            <div class="card result-card">
+                <h2>2. Extracted Data</h2>
+                <div id="loader" class="loader-container" style="display: none;">
+                    <div class="spinner"></div>
+                    <p>Processing with Tesseract OCR...</p>
+                </div>
+
+                <div id="resultsContainer" style="display: none;">
+                    <div class="input-group">
+                        <label for="parsedCompany">Company</label>
+                        <input type="text" id="parsedCompany" placeholder="Biller Company...">
+                    </div>
+
+                    <div class="input-group">
+                        <label for="parsedCustomerName">Customer Name</label>
+                        <input type="text" id="parsedCustomerName" placeholder="Bill To Customer...">
+                    </div>
+
+                    <div class="input-group">
+                        <label for="parsedPhone">Phone Number(s)</label>
+                        <input type="text" id="parsedPhone" placeholder="Found phone numbers...">
+                    </div>
+
+                    <div class="input-group">
+                        <label for="parsedAddress">Address</label>
+                        <textarea id="parsedAddress" rows="2" placeholder="Company Address..."></textarea>
+                    </div>
+
+                    <div class="input-group">
+                        <label for="resultTextarea">Full Raw Text (For Reference)</label>
+                        <textarea id="resultTextarea" rows="3" placeholder="Raw extracted text..."></textarea>
+                    </div>
+
+                    <button id="saveBtn" class="btn success-btn">Save to Supabase</button>
+                </div>
+
+                <div id="statusMessage" class="status-msg"></div>
+            </div>
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+
+</html>
