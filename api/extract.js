@@ -22,8 +22,8 @@ export default async function handler(req, res) {
 - address: The full physical address of the client company.
 
 Rules:
-- Customer name is under the biller (sometimes, if the biller section is not mentioned, leave the customer name empty).
-- The company name is always under the "BILL TO".
+- Customer name is always under the BUYER (sometimes, if the buyer section is not mentioned, leave the customer name empty).
+- The company name is always under the "BILL TO" or "SHIP TO".
 - Always read the information under the title Invoice.
 - If a field is not found or ambiguous, leave its value as an empty string.
 - Return ONLY a raw JSON object string with the exactly matched keys: "company", "customerName", "phone", "address".`;
