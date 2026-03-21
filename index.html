@@ -30,8 +30,8 @@
                 <input type="password" id="supaKey" placeholder="eyJh...">
             </div>
             <div class="input-group" style="margin-top: 20px;">
-                <label for="openAiKey" style="color: #a78bfa;">OpenAI API Key (ChatGPT Extraction)</label>
-                <input type="password" id="openAiKey" placeholder="sk-..." style="border-color: #8b5cf6;">
+                <label for="geminiKey" style="color: #a78bfa;">Gemini 1.5 API Key (For AI Vision extraction)</label>
+                <input type="password" id="geminiKey" placeholder="AIzaSy..." style="border-color: #8b5cf6;">
             </div>
             <p class="subtitle" style="margin-top: 10px; font-size: 12px;">Notes: Requires table
                 <code>invoice_customers</code> with cols <code>customer_name</code>, <code>company</code>,
@@ -69,7 +69,7 @@
                 <h2>2. Extracted Data</h2>
                 <div id="loader" class="loader-container" style="display: none;">
                     <div class="spinner"></div>
-                    <p>Processing with Tesseract OCR...</p>
+                    <p>Analyzing via Vercel Serverless Backend...</p>
                 </div>
 
                 <div id="resultsContainer" style="display: none;">
