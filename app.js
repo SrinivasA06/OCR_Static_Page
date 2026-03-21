@@ -27,7 +27,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Credentials
     const supaUrlInput = document.getElementById('supaUrl');
     const supaKeyInput = document.getElementById('supaKey');
-    const openAiKeyInput = document.getElementById('openAiKey');
     const statusMessage = document.getElementById('statusMessage');
 
     let currentFile = null;
@@ -39,9 +38,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (localStorage.getItem('supaKey')) {
         supaKeyInput.value = localStorage.getItem('supaKey');
     }
-    if (localStorage.getItem('openAiKey')) {
-        openAiKeyInput.value = localStorage.getItem('openAiKey');
-    }
 
     // Save credentials to localStorage on change
     supaUrlInput.addEventListener('input', () => {
@@ -49,9 +45,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     supaKeyInput.addEventListener('input', () => {
         localStorage.setItem('supaKey', supaKeyInput.value.trim());
-    });
-    openAiKeyInput.addEventListener('input', () => {
-        localStorage.setItem('openAiKey', openAiKeyInput.value.trim());
     });
 
     const getSupabase = () => {
@@ -149,69 +142,27 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.readAsDataURL(file);
     }
 
-    // Data Parsing using ChatGPT API
+    // Data Parsing using Vercel Serverless Backend (OpenAI)
     async function extractWithVision(dataUrl) {
         if (window.location.protocol === 'file:') {
-            throw new Error("Chrome blocks APIs from local 'file://'. You MUST test this on your live GitHub Pages link (https://...)!");
+            throw new Error("You are opening a local file. Vercel backend APIs require a proper web server. Please test this directly on your Vercel URL!");
         }
 
-        const apiKey = openAiKeyInput.value.trim();
-        if (!apiKey) {
-            throw new Error("OpenAI API key is missing. Please enter it in the settings card.");
-        }
-
-        const systemPrompt = `You are an expert data extraction assistant. I will provide you with an image of an invoice document.
-Your sole job is to parse the visual text and layout within the image and extract the following exact fields into a valid JSON object:
-- company: The name of the client company being billed (often found under "BILL TO"). Do NOT return the name of the invoice sender.
-- customerName: The name of the specific buyer or employee (often located under "BUYER" or near the phone number).
-- phone: The buyer's phone number.
-- address: The full physical address of the client company.
-
-Rules:
-- If a field is not found or is extremely ambiguous, leave its value as an empty string.
-- Your response MUST be ONLY a raw JSON object string with the keys: "company", "customerName", "phone", "address".
-- Do NOT use markdown code blocks like \`\`\`json in your response. Just output the raw JSON string directly.`;
-
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        const response = await fetch('/api/extract', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
+                'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                model: 'gpt-4o-mini',
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    { 
-                        role: 'user', 
-                        content: [
-                            { type: "text", text: "Extract the exact invoice details strictly formatting as JSON from this image:" },
-                            { type: "image_url", image_url: { url: dataUrl } }
-                        ] 
-                    }
-                ],
-                temperature: 0.1
-            })
+            body: JSON.stringify({ image: dataUrl })
         });
 
         if (!response.ok) {
             const errData = await response.json();
-            throw new Error(errData.error?.message || 'Failed to connect to OpenAI API.');
+            throw new Error(errData.error || 'Serverless API request failed.');
         }
 
         const data = await response.json();
-        let content = data.choices[0].message.content.trim();
-        
-        // Failsafe strip in case GPT wraps it in markdown anyway
-        if (content.startsWith('```json')) content = content.substring(7);
-        if (content.endsWith('```')) content = content.substring(0, content.length - 3);
-        
-        try {
-            return JSON.parse(content.trim());
-        } catch (e) {
-            console.error("GPT JSON Parse Error Output:", content);
-            throw new Error("ChatGPT Vision failed to return a valid JSON format.");
-        }
+        return data.parsedData;
     }
 
     // Extract Text using GPT Vision
