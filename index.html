@@ -10,8 +10,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- Tesseract -->
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
 
 <body>
@@ -30,6 +28,10 @@
             <div class="input-group">
                 <label for="supaKey">Anon public Key</label>
                 <input type="password" id="supaKey" placeholder="eyJh...">
+            </div>
+            <div class="input-group" style="margin-top: 20px;">
+                <label for="openAiKey" style="color: #a78bfa;">OpenAI API Key (ChatGPT Extraction)</label>
+                <input type="password" id="openAiKey" placeholder="sk-..." style="border-color: #8b5cf6;">
             </div>
             <p class="subtitle" style="margin-top: 10px; font-size: 12px;">Notes: Requires table
                 <code>invoice_customers</code> with cols <code>customer_name</code>, <code>company</code>,
