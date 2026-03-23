@@ -24,12 +24,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const loader = document.getElementById('loader');
     const saveBtn = document.getElementById('saveBtn');
 
+    // Queue Elements
+    const queueContainer = document.getElementById('queueContainer');
+    const queueList = document.getElementById('queueList');
+
     // Credentials
     const supaUrlInput = document.getElementById('supaUrl');
     const supaKeyInput = document.getElementById('supaKey');
     const statusMessage = document.getElementById('statusMessage');
 
-    let currentFile = null;
+    let processingQueue = [];
+    let isProcessing = false;
 
     // Load credentials from localStorage
     if (localStorage.getItem('supaUrl')) {
@@ -70,13 +75,13 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         dropZone.classList.remove('dragover');
         if (e.dataTransfer.files.length > 0) {
-            handleFile(e.dataTransfer.files[0]);
+            handleFiles(e.dataTransfer.files);
         }
     });
 
     fileInput.addEventListener('change', (e) => {
         if (e.target.files.length > 0) {
-            handleFile(e.target.files[0]);
+            handleFiles(e.target.files);
         }
     });
 
@@ -87,7 +92,6 @@ document.addEventListener('DOMContentLoaded', () => {
             cameraVideo.srcObject = streamRef;
             cameraContainer.style.display = 'block';
             openCameraBtn.style.display = 'none';
-            dropZone.style.display = 'none';
         } catch (err) {
             showStatus('Camera access denied or unavailable.', 'error');
         }
@@ -100,7 +104,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         cameraContainer.style.display = 'none';
         openCameraBtn.style.display = 'block';
-        dropZone.style.display = 'block';
     });
 
     captureBtn.addEventListener('click', () => {
@@ -111,192 +114,181 @@ document.addEventListener('DOMContentLoaded', () => {
         canvas.getContext('2d').drawImage(cameraVideo, 0, 0);
 
         canvas.toBlob(blob => {
-            const fileName = `camera_capture_${Date.now()}.jpg`;
+            const fileName = `capture_${Date.now()}.jpg`;
             const file = new File([blob], fileName, { type: 'image/jpeg' });
 
-            // cleanup camera
-            streamRef.getTracks().forEach(track => track.stop());
-            streamRef = null;
-            cameraContainer.style.display = 'none';
-            openCameraBtn.style.display = 'block';
-            dropZone.style.display = 'block';
-
-            handleFile(file);
+            // Visual feedback
+            showStatus('Captured! Processing in background...', 'success');
+            
+            handleFiles([file]);
         }, 'image/jpeg', 0.95);
     });
 
-    function handleFile(file) {
-        if (!file.type.startsWith('image/')) {
-            showStatus('Please upload an image file.', 'error');
-            return;
+    function handleFiles(files) {
+        Array.from(files).forEach(file => {
+            if (!file.type.startsWith('image/')) return;
+            
+            const queueItem = {
+                id: Date.now() + Math.random().toString(16).slice(2),
+                file: file,
+                status: 'pending',
+                name: file.name
+            };
+            
+            processingQueue.push(queueItem);
+            renderQueueItem(queueItem);
+        });
+
+        queueContainer.style.display = 'block';
+        if (!isProcessing) {
+            processNextInQueue();
         }
-        currentFile = file;
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            imagePreview.src = e.target.result;
-            dropZone.style.display = 'none';
-            previewContainer.style.display = 'block';
-            extractBtn.disabled = false;
-            resultsContainer.style.display = 'none';
-        };
-        reader.readAsDataURL(file);
     }
 
-    // Data Parsing using Vercel Serverless Backend (OpenAI)
+    function renderQueueItem(item) {
+        const div = document.createElement('div');
+        div.className = 'queue-item';
+        div.id = `item-${item.id}`;
+        div.innerHTML = `
+            <div class="queue-info">
+                <span class="queue-name">${item.name}</span>
+                <span class="queue-status"><span class="status-badge badge-pending">Pending</span></span>
+            </div>
+        `;
+        queueList.appendChild(div);
+        queueList.scrollTop = queueList.scrollHeight;
+    }
+
+    function updateQueueItemStatus(id, status, error = null) {
+        const itemEl = document.getElementById(`item-${id}`);
+        if (!itemEl) return;
+        
+        const badge = itemEl.querySelector('.status-badge');
+        badge.className = `status-badge badge-${status}`;
+        badge.textContent = status === 'error' ? 'Failed' : status;
+        
+        if (status === 'processing') {
+            itemEl.classList.add('processing');
+        } else {
+            itemEl.classList.remove('processing');
+        }
+
+        if (error) {
+            showStatus(`${status.toUpperCase()}: ${error}`, 'error');
+        }
+    }
+
+    async function processNextInQueue() {
+        if (isProcessing) return;
+        
+        const nextItem = processingQueue.find(i => i.status === 'pending');
+        if (!nextItem) {
+            isProcessing = false;
+            return;
+        }
+
+        isProcessing = true;
+        nextItem.status = 'processing';
+        updateQueueItemStatus(nextItem.id, 'processing');
+
+        try {
+            await runEtlWorkflow(nextItem);
+            nextItem.status = 'done';
+            updateQueueItemStatus(nextItem.id, 'done');
+        } catch (err) {
+            console.error(err);
+            nextItem.status = 'error';
+            updateQueueItemStatus(nextItem.id, 'error', err.message);
+        } finally {
+            isProcessing = false;
+            // Short delay before next item for visual smoothness
+            setTimeout(processNextInQueue, 1000);
+        }
+    }
+
+    async function runEtlWorkflow(item) {
+        const supabase = getSupabase();
+        if (!supabase) throw new Error("Supabase credentials missing.");
+
+        // 1. Compress
+        const compressedDataUrl = await compressImage(item.file);
+        
+        // 2. Extract with AI
+        const parsedData = await extractWithVision(compressedDataUrl);
+        
+        // 3. Upload File
+        const fileName = `${Date.now()}-${item.file.name.replace(/[^a-zA-Z0-9.\-]/g, '_')}`;
+        const { error: uploadError } = await supabase.storage.from('documents').upload(fileName, item.file);
+        if (uploadError) throw uploadError;
+
+        const { data: publicUrlData } = supabase.storage.from('documents').getPublicUrl(fileName);
+        const imageUrl = publicUrlData.publicUrl;
+
+        // 4. Save to DB
+        const { error: dbError } = await supabase.from('invoice_customers').insert([{
+            customer_name: (parsedData.customerName || '').trim(),
+            company: (parsedData.company || '').trim(),
+            phone: (parsedData.phone || '').trim(),
+            address: (parsedData.address || '').trim(),
+            image_url: imageUrl,
+            image_path: fileName
+        }]);
+        if (dbError) throw dbError;
+    }
+
+    async function compressImage(file) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+                const MAX_SIZE = 1500;
+                if (width > height && width > MAX_SIZE) {
+                    height = Math.round((height * MAX_SIZE) / width);
+                    width = MAX_SIZE;
+                } else if (height > MAX_SIZE) {
+                    width = Math.round((width * MAX_SIZE) / height);
+                    height = MAX_SIZE;
+                }
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = "white";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0, width, height);
+                resolve(canvas.toDataURL('image/jpeg', 0.8));
+            };
+            img.onerror = reject;
+            img.src = URL.createObjectURL(file);
+        });
+    }
+
     async function extractWithVision(dataUrl) {
         if (window.location.protocol === 'file:') {
-            throw new Error("You are opening a local file. Vercel backend APIs require a proper web server. Please test this directly on your Vercel URL!");
+            throw new Error("Local file:// protocol not supported. Use Vercel URL!");
         }
 
         const response = await fetch('/api/extract', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ image: dataUrl })
         });
 
         if (!response.ok) {
             const errData = await response.json();
-            throw new Error(errData.error || 'Serverless API request failed.');
+            throw new Error(errData.error || 'AI Extraction failed.');
         }
 
         const data = await response.json();
         return data.parsedData;
     }
 
-    // Extract Text using GPT Vision
-    extractBtn.addEventListener('click', async () => {
-        if (!currentFile) return;
-
-        extractBtn.disabled = true;
-        resultsContainer.style.display = 'none';
-        loader.style.display = 'flex';
-        saveBtn.disabled = true;
-        showStatus('Analyzing image structure with AI Vision...', '');
-
-        try {
-            // Compress Image before sending to Vision API (prevents huge payload crashes)
-            const compressedDataUrl = await new Promise((resolve, reject) => {
-                const img = new Image();
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    let width = img.width;
-                    let height = img.height;
-                    
-                    // Downscale to a max of 1500px for speed and payload size limit safety
-                    const MAX_SIZE = 1500;
-                    if (width > height && width > MAX_SIZE) {
-                        height = Math.round((height * MAX_SIZE) / width);
-                        width = MAX_SIZE;
-                    } else if (height > MAX_SIZE) {
-                        width = Math.round((width * MAX_SIZE) / height);
-                        height = MAX_SIZE;
-                    }
-                    
-                    canvas.width = width;
-                    canvas.height = height;
-                    const ctx = canvas.getContext('2d');
-                    // Draw with white background to ensure no transparent PNG issues
-                    ctx.fillStyle = "white";
-                    ctx.fillRect(0, 0, canvas.width, canvas.height);
-                    ctx.drawImage(img, 0, 0, width, height);
-                    
-                    // Compress to 80% JPEG
-                    resolve(canvas.toDataURL('image/jpeg', 0.8));
-                };
-                img.onerror = reject;
-                img.src = URL.createObjectURL(currentFile);
-            });
-
-            // Extract via Native GPT Vision API
-            const parsedData = await extractWithVision(compressedDataUrl);
-
-            resultTextarea.value = "Raw OCR text disabled. Data natively fetched visually via AI Vision.";
-            parsedCompany.value = parsedData.company || '';
-            parsedCustomerName.value = parsedData.customerName || '';
-            parsedPhone.value = parsedData.phone || '';
-            parsedAddress.value = parsedData.address || '';
-
-            resultsContainer.style.display = 'block';
-            saveBtn.disabled = false;
-            showStatus('Native AI Vision extraction successful.', 'success');
-        } catch (error) {
-            console.error(error);
-            showStatus('Vision Extraction failed: ' + error.message, 'error');
-        } finally {
-            loader.style.display = 'none';
-            extractBtn.disabled = false;
-        }
-    });
-
-    saveBtn.addEventListener('click', async () => {
-        const supabase = getSupabase();
-        if (!supabase) {
-            showStatus('Please enter Supabase URL and Key first.', 'error');
-            supaUrlInput.focus();
-            return;
-        }
-
-        if (!currentFile) {
-            showStatus('Nothing to save.', 'error');
-            return;
-        }
-
-        saveBtn.disabled = true;
-        showStatus('Uploading image to Supabase...', 'success');
-
-        try {
-            const fileName = `${Date.now()}-${currentFile.name.replace(/[^a-zA-Z0-9.\-]/g, '_')}`;
-
-            // 1. Upload to Storage
-            const { data: uploadData, error: uploadError } = await supabase
-                .storage
-                .from('documents')
-                .upload(fileName, currentFile);
-
-            if (uploadError) throw uploadError;
-
-            showStatus('Saving data to database...', 'success');
-
-            // Get public URL
-            const { data: publicUrlData } = supabase
-                .storage
-                .from('documents')
-                .getPublicUrl(fileName);
-
-            const imageUrl = publicUrlData.publicUrl;
-
-            // 2. Insert into invoice_customers table
-            const { error: dbError } = await supabase
-                .from('invoice_customers')
-                .insert([
-                    {
-                        customer_name: parsedCustomerName.value.trim(),
-                        company: parsedCompany.value.trim(),
-                        phone: parsedPhone.value.trim(),
-                        address: parsedAddress.value.trim(),
-                        image_url: imageUrl,
-                        image_path: fileName
-                    }
-                ]);
-
-            if (dbError) throw dbError;
-
-            showStatus('Successfully saved to Supabase invoice_customers!', 'success');
-        } catch (error) {
-            console.error(error);
-            showStatus('Error saving: ' + error.message, 'error');
-        } finally {
-            saveBtn.disabled = false;
-        }
-    });
-
     function showStatus(msg, type) {
         statusMessage.textContent = msg;
         statusMessage.className = `status-msg ${type}`;
         if (type === 'success') {
-            setTimeout(() => { statusMessage.textContent = ''; }, 5000);
+            setTimeout(() => { if (statusMessage.textContent === msg) statusMessage.textContent = ''; }, 5000);
         }
     }
 });

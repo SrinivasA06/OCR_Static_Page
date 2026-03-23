@@ -39,8 +39,13 @@
             <div class="card upload-card">
                 <h2>1. Upload Invoice</h2>
                 <div class="drop-zone" id="dropZone">
-                    <span class="drop-text">Drag & drop an image or click to select</span>
-                    <input type="file" id="fileInput" accept="image/*" hidden>
+                    <span class="drop-text">Drag & drop images or click to select</span>
+                    <input type="file" id="fileInput" accept="image/*" multiple hidden>
+                </div>
+
+                <div id="queueContainer" class="queue-container" style="display: none; margin-bottom: 1.5rem;">
+                    <h3>Processing Queue</h3>
+                    <div id="queueList" class="queue-list"></div>
                 </div>
 
                 <button id="openCameraBtn" class="btn primary-btn"
@@ -56,10 +61,7 @@
                     </div>
                 </div>
 
-                <div class="preview-container" id="previewContainer" style="display: none;">
-                    <img id="imagePreview" src="" alt="Document Preview">
-                </div>
-                <button id="extractBtn" class="btn primary-btn" disabled>Extract Invoice Data</button>
+
             </div>
 
             <div class="card result-card">
@@ -70,32 +72,7 @@
                 </div>
 
                 <div id="resultsContainer" style="display: none;">
-                    <div class="input-group">
-                        <label for="parsedCompany">Company</label>
-                        <input type="text" id="parsedCompany" placeholder="Biller Company...">
-                    </div>
-
-                    <div class="input-group">
-                        <label for="parsedCustomerName">Customer Name</label>
-                        <input type="text" id="parsedCustomerName" placeholder="Bill To Customer...">
-                    </div>
-
-                    <div class="input-group">
-                        <label for="parsedPhone">Phone Number(s)</label>
-                        <input type="text" id="parsedPhone" placeholder="Found phone numbers...">
-                    </div>
-
-                    <div class="input-group">
-                        <label for="parsedAddress">Address</label>
-                        <textarea id="parsedAddress" rows="2" placeholder="Company Address..."></textarea>
-                    </div>
-
-                    <div class="input-group">
-                        <label for="resultTextarea">Full Raw Text (For Reference)</label>
-                        <textarea id="resultTextarea" rows="3" placeholder="Raw extracted text..."></textarea>
-                    </div>
-
-                    <button id="saveBtn" class="btn success-btn">Save to Supabase</button>
+                    <p class="subtitle" style="text-align: center;">Processing and saving items automatically...</p>
                 </div>
 
                 <div id="statusMessage" class="status-msg"></div>
